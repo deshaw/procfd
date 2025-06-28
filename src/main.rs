@@ -21,7 +21,7 @@ use procfs::process::{self, FDInfo, FDPermissions};
 use rayon::prelude::*;
 use regex::Regex;
 use serde_derive::Serialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fmt;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
@@ -137,8 +137,12 @@ struct Args {
     no_dns: bool,
 
     // output options
-    #[clap(long, display_order = 15, help = "Render results as JSON")]
+    #[clap(long, display_order = 15, conflicts_with = "pid_only", help = "Render results as JSON")]
     json: bool,
+
+    // output options
+    #[clap(long, display_order = 16, conflicts_with = "json", help = "Only show PIDs")]
+    pid_only: bool,
 }
 
 impl Args {
@@ -389,7 +393,7 @@ impl fmt::Display for UnixSocketEntry {
                 let m = format!(" ({path})");
                 msg.push_str(&m);
             }
-        };
+        }
         let m = format!(" ({})", self.state);
         msg.push_str(&m);
         write!(f, "{msg}")
@@ -1321,6 +1325,7 @@ fn main() -> Result<()> {
     let mut table = Table::new();
     table.set_format(*format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
     table.set_titles(row!("PID", "User", "Name", "Type", "FD", "Target"));
+    let mut unique_pids: HashSet<i32> = HashSet::new();
 
     for process in all_procs.iter() {
         if !process.included_by_filters {
@@ -1332,6 +1337,7 @@ fn main() -> Result<()> {
             process2fdtargets(&process, &net_maps, &pipe2pid, &fd_filter, !args.no_dns);
 
         for fd_entry in fd_entries {
+            unique_pids.insert(fd_entry.pid);
             let fd_str = match fd_entry.fd {
                 Some(fd) => format!("{fd}"),
                 None => String::new(),
@@ -1350,6 +1356,10 @@ fn main() -> Result<()> {
     if args.json {
         let serialized = serde_json::to_string(&all_fds).wrap_err("Error serializing json")?;
         println!("{serialized}");
+    } else if args.pid_only {
+        for pid in unique_pids {
+            println!("{pid}");
+        }
     } else if !all_fds.is_empty() {
         table.printstd();
     }
