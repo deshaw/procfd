@@ -383,13 +383,34 @@ impl fmt::Display for UnixSocketEntry {
             None => self.socket_type.clone(),
         };
         if let Some(peer) = &self.peer {
-            let m = format!(" -> {}[{}]", peer.endpoint.name, peer.endpoint.pid);
-            msg.push_str(&m);
+            // Group endpoints by name and pid
+            // Eg: foo[123][4],foo[123][5] => foo[123][4,5]
+            let grouped: HashMap<String, Vec<&FDEndpoint>> =
+                peer.endpoints
+                    .iter()
+                    .fold(HashMap::new(), |mut acc, endpoint| {
+                        let key = format!("{}[{}]", endpoint.name, endpoint.pid);
+                        acc.entry(key).or_default().push(endpoint);
+                        acc
+                    });
+
+            // Build the comma-separated list
+            let parts: Vec<String> = grouped
+                .into_iter()
+                .map(|(name_pid, endpoints)| {
+                    let fds: Vec<String> = endpoints.iter().map(|e| e.fd.to_string()).collect();
+                    format!("{}[{}]", name_pid, fds.join(","))
+                })
+                .collect();
+
+            let peer_endpoints = format!(" -> {}", parts.join(","));
+            msg.push_str(&peer_endpoints);
+
             if let Some(path) = &peer.path {
                 let m = format!(" ({path})");
                 msg.push_str(&m);
             }
-        };
+        }
         let m = format!(" ({})", self.state);
         msg.push_str(&m);
         write!(f, "{msg}")
@@ -435,7 +456,7 @@ struct PipeTarget {
 struct SocketEndpoint {
     inode: u64,
     path: Option<String>,
-    endpoint: FDEndpoint,
+    endpoints: Vec<FDEndpoint>,
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -1093,19 +1114,16 @@ fn update_unix_map_with_peer(
     all_procs: &Arc<DashSet<ProcessInfo>>,
     unix_map: &mut HashMap<u64, UnixSocketEntry>,
 ) -> Result<()> {
-    let mut socket2fd: HashMap<u64, FDEndpoint> = HashMap::new();
-    // First populate a mapping of all socket inodes to FDEndpoint (pid/fd)
+    let mut socket2fd: HashMap<u64, Vec<FDEndpoint>> = HashMap::new();
+    // First populate a mapping of all socket inodes to Vec<FDEndpoint> (pid/fd)
     for process in all_procs.iter() {
         for fd in &process.fds {
             if let process::FDTarget::Socket(inode) = fd.target {
-                socket2fd.insert(
-                    inode,
-                    FDEndpoint {
-                        pid: process.pid,
-                        name: process.comm.clone(),
-                        fd: fd.fd,
-                    },
-                );
+                socket2fd.entry(inode).or_default().push(FDEndpoint {
+                    pid: process.pid,
+                    name: process.comm.clone(),
+                    fd: fd.fd,
+                });
             }
         }
     }
@@ -1156,12 +1174,14 @@ fn update_unix_map_with_peer(
                     let path = response.name().cloned().map(|p| p.replace('\0', "@"));
 
                     // populate the peer inode to this socket map
-                    if let Some(src_socket) = socket2fd.get(&inode.into()) {
+                    if let Some(src_sockets) = socket2fd.get(&inode.into()) {
+                        let mut src_sockets = src_sockets.clone();
+                        src_sockets.sort_by_key(|endpoint| endpoint.pid);
                         if let Some(net_entry) = unix_map.get_mut(&peer.into()) {
                             net_entry.peer = Some(SocketEndpoint {
                                 inode: inode.into(),
-                                path,
-                                endpoint: src_socket.clone(),
+                                path: path.clone(),
+                                endpoints: src_sockets,
                             });
                         }
                     }
