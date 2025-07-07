@@ -105,14 +105,6 @@ Below is an incomplete (and biased) comparison of these tools:
 | Filter by command                | Yes with regex | Yes exact match        | Yes with regex |
 | Filter by src/dst host/port      | Yes            | No                     | Yes            |
 
-### Notes
-
-[^1]: Fast with local disks, but can be very slow with lots of mounted network filesystems
-[^2]: `lsof -b` avoids blocking calls, but also fails to display any socket information
-[^3]: `lsfd` and `lsof +E` display limited information about the socket endpoint including the command, socket number, and fd number, but not the socket endpoint path. `lsfd` may miss some endpoints if process filters are applied
-[^4]: Not currently implemented but PRs welcome!
-[^5]: Not currently implemented, but can use grep to filter output of `procfd --type path`
-
 ## History
 
 procfd was contributed back to the community by the [D. E. Shaw group](https://www.deshaw.com/).
@@ -129,3 +121,11 @@ This project is released under a [BSD-3-Clause license](https://github.com/desha
 
 We love contributions! Before you can contribute, please sign and submit this [Contributor License Agreement (CLA)](https://www.deshaw.com/oss/cla).
 This CLA is in place to protect all users of this project.
+
+### Notes
+
+[^1]: Fast with local disks, but can be very slow with lots of mounted network filesystems
+[^2]: `lsof -b` avoids blocking calls, but also fails to display any socket information
+[^3]: `lsfd` and `lsof +E` display limited information about the socket endpoint including the command, socket number, and fd number, but not the socket endpoint path. `lsfd` may miss some endpoints if process filters are applied
+[^4]: Not currently implemented but PRs welcome!
+[^5]: Not currently implemented, but can use grep to filter output of `procfd --type path`
