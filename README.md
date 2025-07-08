@@ -54,6 +54,7 @@ PID      | User     | Name | Type         | FD | Target
 
 * `procfd --no-dns` - Disable DNS lookups
 * `procfd --json` - Render results as JSON
+* `procfd --pid-only` - Only show PIDs
 
 ## Installation
 
