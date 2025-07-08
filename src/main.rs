@@ -1357,7 +1357,9 @@ fn main() -> Result<()> {
         let serialized = serde_json::to_string(&all_fds).wrap_err("Error serializing json")?;
         println!("{serialized}");
     } else if args.pid_only {
-        for pid in unique_pids {
+        let mut sorted_pids: Vec<i32> = unique_pids.into_iter().collect();
+        sorted_pids.sort_unstable();
+        for pid in sorted_pids {
             println!("{pid}");
         }
     } else if !all_fds.is_empty() {
