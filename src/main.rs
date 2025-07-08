@@ -140,7 +140,6 @@ struct Args {
     #[clap(long, display_order = 15, conflicts_with = "pid_only", help = "Render results as JSON")]
     json: bool,
 
-    // output options
     #[clap(long, display_order = 16, conflicts_with = "json", help = "Only show PIDs")]
     pid_only: bool,
 }
