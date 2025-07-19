@@ -393,9 +393,8 @@ impl fmt::Display for UnixSocketEntry {
                 .into_iter()
                 .map(|(_, endpoints)| {
                     let endpoints: Vec<&FDEndpoint> = endpoints.into_iter().collect();
-                    let key = format!("{}[{}]", endpoints[0].name, endpoints[0].pid);
                     let fds: Vec<String> = endpoints.iter().map(|e| e.fd.to_string()).collect();
-                    format!("{}[{}]", key, fds.join(","))
+                    format!("{}[{}][{}]", endpoints[0].name, endpoints[0].pid, fds.join(","))
                 })
                 .collect();
 
