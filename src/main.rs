@@ -1324,7 +1324,6 @@ fn main() -> Result<()> {
     let mut table = Table::new();
     table.set_format(*format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
     table.set_titles(row!("PID", "User", "Name", "Type", "FD", "Target"));
-    let mut unique_pids: HashSet<i32> = HashSet::new();
 
     for process in all_procs.iter() {
         if !process.included_by_filters {
@@ -1336,7 +1335,6 @@ fn main() -> Result<()> {
             process2fdtargets(&process, &net_maps, &pipe2pid, &fd_filter, !args.no_dns);
 
         for fd_entry in fd_entries {
-            unique_pids.insert(fd_entry.pid);
             let fd_str = match fd_entry.fd {
                 Some(fd) => format!("{fd}"),
                 None => String::new(),
@@ -1356,9 +1354,8 @@ fn main() -> Result<()> {
         let serialized = serde_json::to_string(&all_fds).wrap_err("Error serializing json")?;
         println!("{serialized}");
     } else if args.pid_only {
-        let mut sorted_pids: Vec<i32> = unique_pids.into_iter().collect();
-        sorted_pids.sort_unstable();
-        for pid in sorted_pids {
+        let unique_pids: HashSet<i32> = all_fds.iter().map(|fd| fd.pid).collect();
+        for pid in unique_pids.into_iter().sorted() {
             println!("{pid}");
         }
     } else if !all_fds.is_empty() {
