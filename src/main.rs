@@ -386,6 +386,7 @@ impl fmt::Display for UnixSocketEntry {
             // Group endpoints by name and pid
             // Eg: Display foo[123][4],foo[123][5] as foo[123][4,5]
             // Use chunk_by since endpoints are already sorted by (pid, fd)
+            // name is already unique for a given pid, so it's not necessary to group by name
             let parts: Vec<String> = peer
                 .endpoints
                 .iter()
