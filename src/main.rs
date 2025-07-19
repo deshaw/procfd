@@ -384,22 +384,18 @@ impl fmt::Display for UnixSocketEntry {
         };
         if let Some(peer) = &self.peer {
             // Group endpoints by name and pid
-            // Eg: foo[123][4],foo[123][5] => foo[123][4,5]
-            let grouped: HashMap<String, Vec<&FDEndpoint>> =
-                peer.endpoints
-                    .iter()
-                    .fold(HashMap::new(), |mut acc, endpoint| {
-                        let key = format!("{}[{}]", endpoint.name, endpoint.pid);
-                        acc.entry(key).or_default().push(endpoint);
-                        acc
-                    });
-
-            // Build the comma-separated list
-            let parts: Vec<String> = grouped
+            // Eg: Display foo[123][4],foo[123][5] as foo[123][4,5]
+            // Use chunk_by since endpoints are already sorted by (pid, fd)
+            let parts: Vec<String> = peer
+                .endpoints
+                .iter()
+                .chunk_by(|a| a.pid)
                 .into_iter()
-                .map(|(name_pid, endpoints)| {
+                .map(|(_, endpoints)| {
+                    let endpoints: Vec<&FDEndpoint> = endpoints.into_iter().collect();
+                    let key = format!("{}[{}]", endpoints[0].name, endpoints[0].pid);
                     let fds: Vec<String> = endpoints.iter().map(|e| e.fd.to_string()).collect();
-                    format!("{}[{}]", name_pid, fds.join(","))
+                    format!("{}[{}]", key, fds.join(","))
                 })
                 .collect();
 
@@ -1176,7 +1172,8 @@ fn update_unix_map_with_peer(
                     // populate the peer inode to this socket map
                     if let Some(src_sockets) = socket2fd.get(&inode.into()) {
                         let mut src_sockets = src_sockets.clone();
-                        src_sockets.sort_by_key(|endpoint| endpoint.pid);
+                        // Sort by pid, then fd
+                        src_sockets.sort_by(|a, b| (a.pid, a.fd).cmp(&(b.pid, b.fd)));
                         if let Some(net_entry) = unix_map.get_mut(&peer.into()) {
                             net_entry.peer = Some(SocketEndpoint {
                                 inode: inode.into(),
