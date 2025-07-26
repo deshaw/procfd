@@ -21,7 +21,7 @@ use procfs::process::{self, FDInfo, FDPermissions};
 use rayon::prelude::*;
 use regex::Regex;
 use serde_derive::Serialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fmt;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
@@ -137,8 +137,11 @@ struct Args {
     no_dns: bool,
 
     // output options
-    #[clap(long, display_order = 15, help = "Render results as JSON")]
+    #[clap(long, display_order = 15, conflicts_with = "pid_only", help = "Render results as JSON")]
     json: bool,
+
+    #[clap(long, display_order = 16, conflicts_with = "json", help = "Only show PIDs")]
+    pid_only: bool,
 }
 
 impl Args {
@@ -389,7 +392,7 @@ impl fmt::Display for UnixSocketEntry {
                 let m = format!(" ({path})");
                 msg.push_str(&m);
             }
-        };
+        }
         let m = format!(" ({})", self.state);
         msg.push_str(&m);
         write!(f, "{msg}")
@@ -1350,6 +1353,11 @@ fn main() -> Result<()> {
     if args.json {
         let serialized = serde_json::to_string(&all_fds).wrap_err("Error serializing json")?;
         println!("{serialized}");
+    } else if args.pid_only {
+        let unique_pids: HashSet<i32> = all_fds.iter().map(|fd| fd.pid).collect();
+        for pid in unique_pids.into_iter().sorted() {
+            println!("{pid}");
+        }
     } else if !all_fds.is_empty() {
         table.printstd();
     }
