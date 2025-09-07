@@ -32,6 +32,7 @@ use std::thread;
 use uzers::{get_user_by_name, get_user_by_uid};
 
 const READ: FDPermissions = FDPermissions::READ;
+const MAX_THREADS: usize = 8;
 const SOCKET_TYPES: [&str; 6] = ["", "stream", "dgram", "raw", "rdm", "seqpacket"];
 
 #[derive(Parser, Debug)]
@@ -1226,6 +1227,20 @@ fn update_unix_map_with_peer(
     Ok(())
 }
 
+// Limit parallelism to no more than 8 threads
+// Anything higher slows down the program
+fn configure_parallelism() {
+    let num_cores = thread::available_parallelism()
+        .map(std::num::NonZeroUsize::get)
+        .unwrap_or(1);
+
+    let num_threads = std::cmp::min(MAX_THREADS, num_cores);
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(num_threads)
+        .build_global()
+        .expect("Error configuring rayon thread pool");
+}
+
 fn clear_environment() {
     for (key, _) in env::vars() {
         env::remove_var(key);
@@ -1325,6 +1340,8 @@ fn get_all_processes(args: &Args, fd_filter: &FDFilter) -> Arc<DashSet<ProcessIn
 fn main() -> Result<()> {
     // As a general security practice, clear the environment in case the command is run privileged
     clear_environment();
+
+    configure_parallelism();
 
     let args = Args::parse();
 
