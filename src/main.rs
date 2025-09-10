@@ -1228,7 +1228,7 @@ fn update_unix_map_with_peer(
 }
 
 // Limit parallelism to no more than 8 threads
-// Anything higher slows down the program
+// Anything higher doesn't yield any performance benefits
 fn configure_parallelism() {
     let num_cores = thread::available_parallelism()
         .map(std::num::NonZeroUsize::get)
