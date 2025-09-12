@@ -514,7 +514,6 @@ enum FDTarget {
     // Some other file descriptor type
     #[serde(rename = "other")]
     Other(String),
-
     // Other paths we're treating as if they were a file descriptor
     #[serde(rename = "cwd")]
     Cwd(PathBuf),
@@ -576,7 +575,7 @@ impl fmt::Display for FDTarget {
             FDTarget::Net(inode) => format!("net:[{inode}]"),
             FDTarget::AnonInode(inode_type) => inode_type.to_string(),
             FDTarget::MemFD(name) => name.to_string(),
-            FDTarget::Other(_) => String::from("other"),
+            FDTarget::Other(data) => data.to_string(),
         };
         write!(f, "{msg}")
     }
@@ -973,10 +972,14 @@ fn process2fdtargets(
                     .has_filter_options()
                     .not()
                     .then_some(FDTarget::MemFD(inode.to_string())),
-                process::FDTarget::Other(..) => fd_filter
+                process::FDTarget::Other(name, inode) => fd_filter
                     .has_filter_options()
                     .not()
-                    .then_some(FDTarget::Other("other".to_string())),
+                    .then_some(FDTarget::Other(format!("{name}:[{inode}]"))),
+                process::FDTarget::Unknown(name, data) => fd_filter
+                    .has_filter_options()
+                    .not()
+                    .then_some(FDTarget::Other(format!("{name}:{data}"))),
             };
             if let Some(fd_target) = fd_target {
                 fd_targets.push(FDEntry::new(process, Some(fd.fd), fd_target));
