@@ -522,6 +522,8 @@ enum FDTarget {
     Root(PathBuf),
     #[serde(rename = "exe")]
     Exe(PathBuf),
+    #[serde(rename = "mmap")]
+    MMap(PathBuf),
 }
 
 impl fmt::Display for FDTarget {
@@ -530,7 +532,8 @@ impl fmt::Display for FDTarget {
             FDTarget::Path(path)
             | FDTarget::Cwd(path)
             | FDTarget::Exe(path)
-            | FDTarget::Root(path) => path.display().to_string(),
+            | FDTarget::Root(path)
+            | FDTarget::MMap(path) => path.display().to_string(),
             FDTarget::Socket(socket_info) => match &socket_info.entry {
                 Some(e) => format!("{e}"),
                 // Display an empty string for unsupported socket type
@@ -722,6 +725,12 @@ impl FDFilter {
         !self.has_filter_options() || self.type_ == Some(FDType::Exe) || self.type_.is_none()
     }
 
+    fn query_mmaps(&self) -> bool {
+        // query MMaps when filters OR or --type path OR filter for path without --type
+        !self.has_filter_options() || self.type_ == Some(FDType::Path) || self.type_.is_none()
+    }
+
+
     fn query_socket(&self) -> bool {
         !self.has_filter_options() || self.type_ == Some(FDType::Socket)
     }
@@ -835,6 +844,7 @@ fn get_fd_type(target: &FDTarget) -> String {
         FDTarget::Net(_) => String::from("net"),
         FDTarget::AnonInode(_) => String::from("anon_inode"),
         FDTarget::MemFD(_) => String::from("memfd"),
+        FDTarget::MMap(_) => String::from("mmap"),
         FDTarget::Other(_) => String::from("other"),
     }
 }
@@ -1005,6 +1015,16 @@ fn process2fdtargets(
             fd_targets.push(FDEntry::new(process, None, fd_target));
         }
     }
+    if fd_filter.query_mmaps() {
+        if let Some(mmaps) = &process.mmaps {
+            fd_targets.extend(
+                mmaps
+                    .iter()
+                    .map(|path| FDEntry::new(process, None, FDTarget::MMap(path.clone()))),
+            );
+        }
+    }
+
     fd_targets
 }
 
@@ -1255,10 +1275,11 @@ struct ProcessInfo {
     uid: u32,
     comm: String,
     fds: Vec<FDInfo>,
-    // The exe/cwd/root fields are only populated if displaying them is necessary
+    // The exe/cwd/root/mmaps fields are only populated if displaying them is necessary
     exe: Option<PathBuf>,
     cwd: Option<PathBuf>,
     root: Option<PathBuf>,
+    mmaps: Option<Vec<PathBuf>>,
     included_by_filters: bool,
 }
 
@@ -1304,6 +1325,7 @@ fn get_all_processes(args: &Args, fd_filter: &FDFilter) -> Arc<DashSet<ProcessIn
         let Ok(uid) = proc.uid() else {
             return; // process vanished
         };
+
         let mut process_info = ProcessInfo {
             pid: proc.pid(),
             uid,
@@ -1312,12 +1334,13 @@ fn get_all_processes(args: &Args, fd_filter: &FDFilter) -> Arc<DashSet<ProcessIn
             exe: None,
             cwd: None,
             root: None,
+            mmaps: None,
             included_by_filters: true,
         };
         process_info.included_by_filters = args.filter_process(&process_info);
 
         if process_info.included_by_filters {
-            // populate exe, cwd, root only if necessary
+            // populate exe, cwd, root, mmaps only if necessary
             if fd_filter.query_exe() {
                 process_info.exe = proc.exe().ok();
             }
@@ -1327,6 +1350,21 @@ fn get_all_processes(args: &Args, fd_filter: &FDFilter) -> Arc<DashSet<ProcessIn
             if fd_filter.query_root() {
                 process_info.root = proc.root().ok();
             }
+            if fd_filter.query_mmaps() {
+                let Ok(mmaps) = proc.maps() else {
+                    return; // process vanished
+                };
+                let mut mmap_paths: Vec<_> = mmaps
+                    .into_iter()
+                    .filter_map(|m| match m.pathname {
+                        process::MMapPath::Path(p) => Some(p),
+                        _ => None,
+                    })
+                    .collect();
+                mmap_paths.sort();
+                mmap_paths.dedup();
+                process_info.mmaps = Some(mmap_paths);
+            };
         }
         if query_fds {
             let Ok(fds) = proc.fd() else {
@@ -1334,7 +1372,6 @@ fn get_all_processes(args: &Args, fd_filter: &FDFilter) -> Arc<DashSet<ProcessIn
             };
             process_info.fds = fds.filter_map(Result::ok).collect();
         }
-
         all_procs.insert(process_info);
     });
     all_procs
