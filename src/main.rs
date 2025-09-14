@@ -196,6 +196,8 @@ enum FDType {
     Exe,
     Path,
     Pipe,
+    #[value(name = "mmap")]
+    MMap,
 }
 
 #[derive(Copy, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
@@ -692,9 +694,8 @@ impl FDFilter {
 
     fn query_mmaps(&self) -> bool {
         // query MMaps when filters OR or --type path OR filter for path without --type
-        !self.has_filter_options() || self.type_ == Some(FDType::Path) || self.type_.is_none()
+        !self.has_filter_options() || self.type_ == Some(FDType::MMap)
     }
-
 
     fn query_socket(&self) -> bool {
         !self.has_filter_options() || self.type_ == Some(FDType::Socket)
@@ -1301,10 +1302,27 @@ fn get_all_processes(args: &Args, fd_filter: &FDFilter) -> Arc<DashSet<ProcessIn
                 let Ok(mmaps) = proc.maps() else {
                     return; // process vanished
                 };
+
+                // Use process_info.exe, or fall back to proc.exe(),
+                // to exclude the executable path from mmap results.
+                let mut exe_path = process_info.exe.as_ref();
+                let fallback; // defined in outer scope
+                if exe_path.is_none() {
+                    fallback = proc.exe().ok();
+                    exe_path = fallback.as_ref();
+                }
+
                 let mut mmap_paths: Vec<_> = mmaps
                     .into_iter()
                     .filter_map(|m| match m.pathname {
-                        process::MMapPath::Path(p) => Some(p),
+                        process::MMapPath::Path(p) => {
+                            // exclude the executable path if present
+                            if Some(&p) == exe_path {
+                                None
+                            } else {
+                                Some(p)
+                            }
+                        }
                         _ => None,
                     })
                     .collect();
