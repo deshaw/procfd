@@ -693,7 +693,7 @@ impl FDFilter {
     }
 
     fn query_mmaps(&self) -> bool {
-        // query MMaps when filters OR or --type path OR filter for path without --type
+        // query MMaps when filters OR or --type mmap
         !self.has_filter_options() || self.type_ == Some(FDType::MMap)
     }
 
@@ -1306,7 +1306,7 @@ fn get_all_processes(args: &Args, fd_filter: &FDFilter) -> Arc<DashSet<ProcessIn
                 // Use process_info.exe, or fall back to proc.exe(),
                 // to exclude the executable path from mmap results.
                 let mut exe_path = process_info.exe.as_ref();
-                let fallback; // defined in outer scope
+                let fallback;
                 if exe_path.is_none() {
                     fallback = proc.exe().ok();
                     exe_path = fallback.as_ref();
@@ -1316,7 +1316,6 @@ fn get_all_processes(args: &Args, fd_filter: &FDFilter) -> Arc<DashSet<ProcessIn
                     .into_iter()
                     .filter_map(|m| match m.pathname {
                         process::MMapPath::Path(p) => {
-                            // exclude the executable path if present
                             if Some(&p) == exe_path {
                                 None
                             } else {
