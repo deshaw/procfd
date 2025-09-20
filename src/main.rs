@@ -677,6 +677,11 @@ impl FDFilter {
         !self.has_filter_options() || self.type_ == Some(FDType::Path)
     }
 
+    fn query_mmaps(&self) -> bool {
+        // query MMaps when no filters OR --type mmap
+        !self.has_filter_options() || self.type_ == Some(FDType::MMap)
+    }
+
     fn query_cwd(&self) -> bool {
         // query exe when there are no filters OR a filter for --exe OR a filter for --path without --type
         !self.has_filter_options() || self.type_ == Some(FDType::Cwd) || self.type_.is_none()
@@ -690,11 +695,6 @@ impl FDFilter {
     fn query_exe(&self) -> bool {
         // query exe when there are no filters OR a filter for --exe OR a filter for --path without --type
         !self.has_filter_options() || self.type_ == Some(FDType::Exe) || self.type_.is_none()
-    }
-
-    fn query_mmaps(&self) -> bool {
-        // query MMaps when filters OR or --type mmap
-        !self.has_filter_options() || self.type_ == Some(FDType::MMap)
     }
 
     fn query_socket(&self) -> bool {
