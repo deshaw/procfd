@@ -1302,26 +1302,10 @@ fn get_all_processes(args: &Args, fd_filter: &FDFilter) -> Arc<DashSet<ProcessIn
                 let Ok(mmaps) = proc.maps() else {
                     return; // process vanished
                 };
-
-                // Always exclude the process executable from memory map results.
-                // Use fetched exe path if available, otherwise query it.
-                let mut exe_path = process_info.exe.as_ref();
-                let fallback;
-                if exe_path.is_none() {
-                    fallback = proc.exe().ok();
-                    exe_path = fallback.as_ref();
-                }
-
                 let mut mmap_paths: Vec<_> = mmaps
                     .into_iter()
                     .filter_map(|m| match m.pathname {
-                        process::MMapPath::Path(p) => {
-                            if Some(&p) == exe_path {
-                                None
-                            } else {
-                                Some(p)
-                            }
-                        }
+                        process::MMapPath::Path(p) => Some(p),
                         _ => None,
                     })
                     .collect();
