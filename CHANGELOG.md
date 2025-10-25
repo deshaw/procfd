@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.0 (2025-10-25)
+
+### Features
+- Display memory mapped files for processes (#7)
+
+### Bug Fixes
+- Limit parallelism to 8 threads (#5)
+- Handle unknown fd types (#6)
+
 ## 1.1.0 (2025-08-03)
 
 ### Features

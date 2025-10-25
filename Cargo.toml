@@ -8,7 +8,7 @@ repository = "https://github.com/deshaw/procfd"
 license = "BSD-3-Clause"
 keywords = ["lsof", "lsfd", "procfs", "open-files"]
 categories = ["command-line-utilities", "os::linux-apis", "filesystem"]
-version = "1.1.0"
+version = "1.2.0"
 edition = "2021"
 
 [dependencies]
