@@ -97,12 +97,11 @@ Below is an incomplete (and biased) comparison of these tools:
 | Display endpoint of unix sockets | Yes            | Partial [^3]           | Partial        |
 | Display endpoint of pipes        | Yes            | Yes (with lsof -E)     | Yes            |
 | Usability                        | Easy           | Complicated            | Medium         |
-| Show memory maps                 | No[^4]         | Yes                    | Yes            |
 | Filter by expression             | No             | Partial                | Yes            |
 | DNS Lookups                      | Yes            | Yes                    | No             |
 | Show mount points                | No             | Yes                    | Yes            |
 | IPv6 support                     | Yes            | Yes                    | Yes            |
-| Filter by path                   | No[^5]         | Yes                    | Yes            |
+| Filter by path                   | No[^4]         | Yes                    | Yes            |
 | Filter by command                | Yes with regex | Yes exact match        | Yes with regex |
 | Filter by src/dst host/port      | Yes            | No                     | Yes            |
 
@@ -128,5 +127,4 @@ This CLA is in place to protect all users of this project.
 [^1]: Fast with local disks, but can be very slow with lots of mounted network filesystems
 [^2]: `lsof -b` avoids blocking calls, but also fails to display any socket information
 [^3]: `lsfd` and `lsof +E` display limited information about the socket endpoint including the command, socket number, and fd number, but not the socket endpoint path. `lsfd` may miss some endpoints if process filters are applied
-[^4]: Not currently implemented but PRs welcome!
-[^5]: Not currently implemented, but can use grep to filter output of `procfd --type path`
+[^4]: Not currently implemented, but can use grep to filter output of `procfd --type path`
