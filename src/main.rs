@@ -32,6 +32,7 @@ use std::thread;
 use uzers::{get_user_by_name, get_user_by_uid};
 
 const READ: FDPermissions = FDPermissions::READ;
+const WRITE: FDPermissions = FDPermissions::WRITE;
 const MAX_THREADS: usize = 8;
 const SOCKET_TYPES: [&str; 6] = ["", "stream", "dgram", "raw", "rdm", "seqpacket"];
 
@@ -455,7 +456,6 @@ impl fmt::Display for SocketEntry {
 #[derive(Serialize, Debug)]
 struct PipeInfo {
     inode: u64,
-    mode: char,
     endpoints: Vec<PipeTarget>,
     #[serde(skip)]
     self_pid: i32,
@@ -466,7 +466,7 @@ struct PipeTarget {
     pid: i32,
     name: String,
     fd: i32,
-    mode: char,
+    mode: String,
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -549,7 +549,6 @@ impl fmt::Display for FDTarget {
                 }
             },
             FDTarget::Pipe(p) => {
-                let direction = if p.mode == 'r' { "<-" } else { "->" };
                 // To save space when a pipe has lots of connected endpoints,
                 // condense entries with the same proc name & fd, but different pids.
                 // Eg: foo[789][1],httpd[123][5],httpd[456][5] => foo[789][1],httpd[123,456][5]
@@ -576,7 +575,7 @@ impl fmt::Display for FDTarget {
                     .collect::<Vec<String>>()
                     .join(",");
 
-                format!("pipe {direction} {joined_endpoints}")
+                format!("pipe -> {joined_endpoints}")
             }
             FDTarget::Net(inode) => format!("net:[{inode}]"),
             FDTarget::AnonInode(inode_type) => inode_type.to_string(),
@@ -595,6 +594,7 @@ struct FDEntry {
     user: String,
     name: String,
     fd: Option<i32>,
+    mode: Option<String>,
     #[serde(rename = "type")]
     fd_type: String,
     target: FDTarget,
@@ -852,7 +852,12 @@ fn get_fd_type(target: &FDTarget) -> String {
 
 // File descriptor entry
 impl FDEntry {
-    fn new(process: &ProcessInfo, fd: Option<i32>, target: FDTarget) -> FDEntry {
+    fn new(
+        process: &ProcessInfo,
+        fd: Option<i32>,
+        mode: Option<String>,
+        target: FDTarget,
+    ) -> FDEntry {
         let fd_type = get_fd_type(&target);
         FDEntry {
             pid: process.pid,
@@ -864,6 +869,7 @@ impl FDEntry {
             },
             name: process.comm.clone(),
             fd,
+            mode,
             fd_type,
             target,
         }
@@ -890,6 +896,15 @@ fn process2fdtargets(
     // Query file descriptors only if necessary (not for --exe/--root/--cwd)
     if fd_filter.query_fds() {
         for fd in &process.fds {
+            let mode = if fd.mode() & (READ | WRITE) == (READ | WRITE) {
+                String::from("rw")
+            } else if fd.mode() & WRITE == WRITE {
+                String::from("w")
+            } else if fd.mode() & READ == READ {
+                String::from("r")
+            } else {
+                String::new()
+            };
             let fd_target: Option<FDTarget> = match &fd.target {
                 process::FDTarget::Socket(inode) => {
                     if !fd_filter.query_socket() {
@@ -963,11 +978,9 @@ fn process2fdtargets(
                     .query_path()
                     .then_some(FDTarget::Path(path_buf.clone())),
                 process::FDTarget::Pipe(inode) => fd_filter.query_pipe().then(|| {
-                    let mode = if fd.mode() & READ == READ { 'r' } else { 'w' };
                     FDTarget::Pipe(PipeInfo {
                         inode: *inode,
-                        mode,
-                        endpoints: lookup_pipe2pid(*inode, process.pid, fd.fd, mode, pipe2pid),
+                        endpoints: lookup_pipe2pid(*inode, process.pid, fd.fd, &mode, pipe2pid),
                         self_pid: process.pid,
                     })
                 }),
@@ -994,26 +1007,26 @@ fn process2fdtargets(
                     .then_some(FDTarget::Other(format!("{name}:{data}"))),
             };
             if let Some(fd_target) = fd_target {
-                fd_targets.push(FDEntry::new(process, Some(fd.fd), fd_target));
+                fd_targets.push(FDEntry::new(process, Some(fd.fd), Some(mode), fd_target));
             }
         }
     }
     if fd_filter.query_exe() {
         if let Some(path) = &process.exe {
             let fd_target = FDTarget::Exe(path.clone());
-            fd_targets.push(FDEntry::new(process, None, fd_target));
+            fd_targets.push(FDEntry::new(process, None, None, fd_target));
         }
     }
     if fd_filter.query_cwd() {
         if let Some(path) = &process.cwd {
             let fd_target = FDTarget::Cwd(path.clone());
-            fd_targets.push(FDEntry::new(process, None, fd_target));
+            fd_targets.push(FDEntry::new(process, None, None, fd_target));
         }
     }
     if fd_filter.query_root() {
         if let Some(path) = &process.root {
             let fd_target = FDTarget::Root(path.clone());
-            fd_targets.push(FDEntry::new(process, None, fd_target));
+            fd_targets.push(FDEntry::new(process, None, None, fd_target));
         }
     }
     if fd_filter.query_mmaps() {
@@ -1021,7 +1034,7 @@ fn process2fdtargets(
             fd_targets.extend(
                 mmaps
                     .iter()
-                    .map(|path| FDEntry::new(process, None, FDTarget::MMap(path.clone()))),
+                    .map(|path| FDEntry::new(process, None, None, FDTarget::MMap(path.clone()))),
             );
         }
     }
@@ -1115,7 +1128,7 @@ fn lookup_pipe2pid(
     inode: u64,
     pid: i32,
     fd: i32,
-    mode: char,
+    mode: &String,
     pipe2pid: &HashMap<u64, Vec<PipeTarget>>,
 ) -> Vec<PipeTarget> {
     // Look up the connected processes for this pipe
@@ -1124,7 +1137,7 @@ fn lookup_pipe2pid(
     // exclude own pid/fd from result
     targets.retain(|x| !(x.pid == pid && x.fd == fd));
     // exclude fds with the same mode
-    targets.retain(|x| x.mode != mode);
+    targets.retain(|x| x.mode != *mode);
     targets
 }
 
@@ -1140,7 +1153,11 @@ fn get_pipe2pid(all_procs: &Arc<DashSet<ProcessInfo>>) -> HashMap<u64, Vec<PipeT
                     pid: process.pid,
                     name: process.comm.clone(),
                     fd: fd.fd,
-                    mode: if fd.mode() & READ == READ { 'r' } else { 'w' },
+                    mode: if fd.mode() & READ == READ {
+                        String::from("r")
+                    } else {
+                        String::from("w")
+                    },
                 });
             }
         }
@@ -1413,7 +1430,7 @@ fn main() -> Result<()> {
     // Render table
     let mut table = Table::new();
     table.set_format(*format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
-    table.set_titles(row!("PID", "User", "Name", "Type", "FD", "Target"));
+    table.set_titles(row!("PID", "User", "Name", "Type", "FD", "Mode", "Target"));
 
     for process in all_procs.iter() {
         if !process.included_by_filters {
@@ -1429,12 +1446,14 @@ fn main() -> Result<()> {
                 Some(fd) => format!("{fd}"),
                 None => String::new(),
             };
+            let mode_str = fd_entry.mode.clone().unwrap_or_default();
             table.add_row(Row::new(vec![
                 Cell::new(format!("{}", fd_entry.pid).as_str()),
                 Cell::new(fd_entry.user.as_str()),
                 Cell::new(fd_entry.name.as_str()),
                 Cell::new(fd_entry.fd_type().as_str()),
                 Cell::new(fd_str.as_str()),
+                Cell::new(mode_str.as_str()),
                 Cell::new(format!("{}", fd_entry.target).as_str()),
             ]));
             all_fds.push(fd_entry);
