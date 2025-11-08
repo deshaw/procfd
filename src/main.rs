@@ -1382,7 +1382,7 @@ fn get_all_processes(args: &Args, fd_filter: &FDFilter) -> Arc<DashSet<ProcessIn
                 mmap_paths.sort();
                 mmap_paths.dedup();
                 process_info.mmaps = Some(mmap_paths);
-            };
+            }
         }
         if query_fds {
             let Ok(fds) = proc.fd() else {
@@ -1395,18 +1395,12 @@ fn get_all_processes(args: &Args, fd_filter: &FDFilter) -> Arc<DashSet<ProcessIn
     all_procs
 }
 
-fn main() -> Result<()> {
-    // As a general security practice, clear the environment in case the command is run privileged
-    clear_environment();
 
-    configure_parallelism();
-
-    let args = Args::parse();
-
+fn get_fd_entries(args: &Args) -> Result<Vec<FDEntry>> {
     // query all processes and initialize filtering
-    let fd_filter = FDFilter::new(&args);
+    let fd_filter = FDFilter::new(args);
 
-    let all_procs = get_all_processes(&args, &fd_filter);
+    let all_procs = get_all_processes(args, &fd_filter);
 
     // collect mapping of inode to tcp/udp/unix entry
     let mut net_maps = get_net_maps().wrap_err("Error collecting network maps")?;
@@ -1423,15 +1417,7 @@ fn main() -> Result<()> {
     } else {
         HashMap::new()
     };
-
-    // populate a list of FDEntry
     let mut all_fds = Vec::new();
-
-    // Render table
-    let mut table = Table::new();
-    table.set_format(*format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
-    table.set_titles(row!("PID", "User", "Name", "Type", "FD", "Mode", "Target"));
-
     for process in all_procs.iter() {
         if !process.included_by_filters {
             // skip this process if it doesn't match the process filter
@@ -1441,7 +1427,35 @@ fn main() -> Result<()> {
         let fd_entries =
             process2fdtargets(&process, &net_maps, &pipe2pid, &fd_filter, !args.no_dns);
 
-        for fd_entry in fd_entries {
+        all_fds.extend(fd_entries);
+    }
+    Ok(all_fds)
+}
+
+
+fn main() -> Result<()> {
+    // As a general security practice, clear the environment in case the command is run privileged
+    clear_environment();
+
+    configure_parallelism();
+
+    let args = Args::parse();
+    let all_fds = get_fd_entries(&args)?;
+
+    if args.json {
+        let serialized = serde_json::to_string(&all_fds).wrap_err("Error serializing json")?;
+        println!("{serialized}");
+    } else if args.pid_only {
+        let unique_pids: HashSet<i32> = all_fds.iter().map(|fd| fd.pid).collect();
+        for pid in unique_pids.into_iter().sorted() {
+            println!("{pid}");
+        }
+    } else if !all_fds.is_empty() {
+        // Render table
+        let mut table = Table::new();
+        table.set_format(*format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
+        table.set_titles(row!("PID", "User", "Name", "Type", "FD", "Mode", "Target"));
+        for fd_entry in &all_fds {
             let fd_str = match fd_entry.fd {
                 Some(fd) => format!("{fd}"),
                 None => String::new(),
@@ -1456,18 +1470,7 @@ fn main() -> Result<()> {
                 Cell::new(mode_str.as_str()),
                 Cell::new(format!("{}", fd_entry.target).as_str()),
             ]));
-            all_fds.push(fd_entry);
         }
-    }
-    if args.json {
-        let serialized = serde_json::to_string(&all_fds).wrap_err("Error serializing json")?;
-        println!("{serialized}");
-    } else if args.pid_only {
-        let unique_pids: HashSet<i32> = all_fds.iter().map(|fd| fd.pid).collect();
-        for pid in unique_pids.into_iter().sorted() {
-            println!("{pid}");
-        }
-    } else if !all_fds.is_empty() {
         table.printstd();
     }
     Ok(())
