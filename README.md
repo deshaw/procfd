@@ -14,32 +14,36 @@ procfd is a Linux tool to query open file descriptors for processes. It is a rus
 ### Filter by PID
 
 ```bash
-$ procfd --pid 3964924
-PID      | User     | Name | Type         | FD | Target
----------+----------+------+--------------+----+-------------------------------------------------------------------------
- 3964924 | maverick | sshd | file         | 0  | /dev/null
- 3964924 | maverick | sshd | file         | 1  | /dev/null
- 3964924 | maverick | sshd | file         | 2  | /dev/null
- 3964924 | maverick | sshd | socket[inet] | 3  | TCP: localhost:60168 -> localhost:39629 (ESTABLISHED)
- 3964924 | maverick | sshd | socket[inet] | 4  | TCP: my-host.com:22 -> remote-host.com:63706 (ESTABLISHED)
- 3964924 | maverick | sshd | file         | 5  | /etc/krb5/db/data.mdb
- 3964924 | maverick | sshd | socket[unix] | 6  | stream (ESTABLISHED)
- 3964924 | maverick | sshd | socket[unix] | 7  | stream -> sshd[3964921] (ESTABLISHED)
- 3964924 | maverick | sshd | file         | 8  | /etc/krb5/db/data.mdb
- 3964924 | maverick | sshd | file         | 9  | /run/systemd/sessions/157280.ref
- 3964924 | maverick | sshd | pipe         | 10 | pipe <- [11]
- 3964924 | maverick | sshd | pipe         | 11 | pipe -> [10]
- 3964924 | maverick | sshd | socket[inet] | 12 | TCP: localhost:60176 -> localhost:39629 (ESTABLISHED)
- 3964924 | maverick | sshd | pipe         | 15 | pipe <- sleep[2813702][1],bash[3964926][1]
- 3964924 | maverick | sshd | pipe         | 17 | pipe <- sleep[2813702][2],bash[3964926][2]
- 3964924 | maverick | sshd | exe          |    | /usr/sbin/sshd
- 3964924 | maverick | sshd | cwd          |    | /
- 3964924 | maverick | sshd | root         |    | /
+$ procfd --pid 710156
+ PID    | User     | Name | Type         | FD | Mode | Target
+--------+----------+------+--------------+----+------+---------------------------------------------------------------------------------
+ 710156 | maverick | sshd | path         | 0  | rw   | /dev/null
+ 710156 | maverick | sshd | path         | 1  | rw   | /dev/null
+ 710156 | maverick | sshd | path         | 2  | rw   | /dev/null
+ 710156 | maverick | sshd | path         | 3  | rw   | /dev/ptmx
+ 710156 | maverick | sshd | socket[inet] | 4  | rw   | TCP: my-host.com:22 -> remote-host.com:63706 (ESTABLISHED)
+ 710156 | maverick | sshd | path         | 5  | r    | /etc/krb5/db/data.mdb
+ 710156 | maverick | sshd | socket[unix] | 6  | rw   | stream (ESTABLISHED)
+ 710156 | maverick | sshd | socket[unix] | 7  | rw   | stream -> sshd[710152][9] (ESTABLISHED)
+ 710156 | maverick | sshd | path         | 8  | w    | /run/systemd/sessions/349.ref
+ 710156 | maverick | sshd | pipe         | 9  | r    | pipe -> [10]
+ 710156 | maverick | sshd | pipe         | 10 | w    | pipe -> [9]
+ 710156 | maverick | sshd | path         | 14 | rw   | /dev/ptmx
+ 710156 | maverick | sshd | path         | 15 | rw   | /dev/ptmx
+ 710156 | maverick | sshd | pipe         | 16 | r    | pipe -> sleep[2813702][1],bash[3964926][1]
+ 710156 | maverick | sshd | pipe         | 17 | r    | pipe -> sleep[2813702][2],bash[3964926][2]
+ 710156 | maverick | sshd | exe          |    |      | /usr/sbin/sshd
+ 710156 | maverick | sshd | cwd          |    |      | /
+ 710156 | maverick | sshd | root         |    |      | /
+ 710156 | maverick | sshd | mmap         |    |      | /usr/lib64/ld-2.28.so
+ 710156 | maverick | sshd | mmap         |    |      | /usr/lib64/libaudit.so.1.0.0
+ 710156 | maverick | sshd | mmap         |    |      | /usr/lib64/libblkid.so.1.1.0
+ 710156 | maverick | sshd | mmap         |    |      | /usr/lib64/libc-2.28.so
 ```
 
 ### Filtering examples
 
-* `procfd --type {socket,cwd,root,exe,path,pipe}` - Filter by socket type
+* `procfd --type {socket,cwd,root,exe,path,pipe,mmap}` - Filter by socket type
 * `procfd --socket-domain {unix,inet,inet4,inet6,other}` - Filter sockets by domain
 * `procfd --socket-type {tcp,udp,unix-stream,unix-dgram}` - Filter by socket type
 * `procfd --socket-state {listen,established,close}` - Filter by socket state
@@ -72,6 +76,14 @@ Cargo will build the `procfd` binary and place it in your `CARGO_INSTALL_ROOT`.
 For more details on installation location see [the cargo
 book](https://doc.rust-lang.org/cargo/commands/cargo-install.html#description).
 
+### Nix
+
+[![nixpkgs unstable package](https://repology.org/badge/version-for-repo/nix_unstable/procfd.svg)](https://repology.org/project/procfd/versions)
+
+```
+nix-env -iA nixpkgs.procfd
+```
+
 ### Manual
 
 Download the binary on the [releases](https://github.com/deshaw/procfd/releases) page and put them in your $PATH. Or run the shell command:
@@ -100,7 +112,7 @@ Below is an incomplete (and biased) comparison of these tools:
 | Filter by expression             | No             | Partial                | Yes            |
 | DNS Lookups                      | Yes            | Yes                    | No             |
 | Show mount points                | No             | Yes                    | Yes            |
-| IPv6 support                     | Yes            | Yes                    | Yes            |
+| Protocol support                 | Partial[^5]    | Full                   | Full           |
 | Filter by path                   | No[^4]         | Yes                    | Yes            |
 | Filter by command                | Yes with regex | Yes exact match        | Yes with regex |
 | Filter by src/dst host/port      | Yes            | No                     | Yes            |
@@ -128,3 +140,4 @@ This CLA is in place to protect all users of this project.
 [^2]: `lsof -b` avoids blocking calls, but also fails to display any socket information
 [^3]: `lsfd` and `lsof +E` display limited information about the socket endpoint including the command, socket number, and fd number, but not the socket endpoint path. `lsfd` may miss some endpoints if process filters are applied
 [^4]: Not currently implemented, but can use grep to filter output of `procfd --type path`
+[^5]: List of unsupported protocols is listed in [#12](https://github.com/deshaw/procfd/issues/12)
