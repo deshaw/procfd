@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.0 (2025-11-09)
+
+### Features
+- Add file descriptor mode (#9)
+
 ## 1.2.0 (2025-10-25)
 
 ### Features
